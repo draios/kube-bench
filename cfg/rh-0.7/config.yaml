@@ -32,9 +32,13 @@ master:
       - etcd
 
 node:
-  svcs:
-    - /etc/systemd/system/atomic-openshift-node.service
-    - /etc/systemd/system/origin-node.service
+  kubelet:
+    svc:
+      - /etc/systemd/system/atomic-openshift-node.service
+      - /etc/systemd/system/origin-node.service
+    confs:
+      - /etc/systemd/system/atomic-openshift-node.service
+      - /etc/systemd/system/origin-node.service
   proxy:
     bins:
       - openshift start network

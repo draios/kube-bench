@@ -243,7 +243,7 @@ groups:
 
       - id: 8.3
         text: "Verify the kubelet service file permissions of 644"
-        audit: "stat -c permissions=%a $nodesvc"
+        audit: "stat -c permissions=%a $kubeletsvc"
         tests:
           test_items:
             - flag: "permissions"
@@ -253,12 +253,12 @@ groups:
               set: true
         remediation: |
           Run the below command on each worker node.
-          chmod 644 $nodesvc
+          chmod 644 $kubeletsvc
         scored: true
 
       - id: 8.4
         text: "Verify the kubelet service file ownership of root:root"
-        audit: "stat -c %U:%G $nodesvc"
+        audit: "stat -c %U:%G $kubeletsvc"
         tests:
           test_items:
             - flag: "root:root"
@@ -268,7 +268,7 @@ groups:
               set: true
           remediation: |
             Run the below command on each worker node.
-            chown root:root $nodesvc
+            chown root:root $kubeletsvc
           scored: true
 
       - id: 8.5
