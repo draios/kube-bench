@@ -1,0 +1,52 @@
+name: Build kube-bench-dependency image
+
+# Publishes the `kube-bench-dependency` image consumed by secure-backend's
+# compliance-benchmark-runner (pinned there via KUBE_BENCH_TAG).
+#
+# Runs AFTER the tag is created: when a Sysdig dependency tag is pushed, this
+# workflow triggers the `secure/compliance/compliance-kube-bench` Jenkins job
+# with TAG=<the tag>. The job checks out that tag, builds Dependency-Dockerfile,
+# and pushes kube-bench-dependency:<tag> to GAR — so the published registry
+# tag matches the git tag 1:1.
+#
+# Registry tags are immutable, so each newly pushed dependency tag is a fresh
+# release by construction; this workflow never re-publishes an existing tag.
+#
+# Tag scheme: the Sysdig dependency versions are 4-part numeric
+# MAJOR.MINOR.PATCH.BUILD (e.g. 1.0.0.0 ... 1.2.0.7, and future 1.2.1.0 /
+# 2.0.0.0). The glob below matches any 4-part numeric tag, which is distinct
+# from the upstream release tags (`v*` prefix, and short 2-3 part tags like
+# 0.2.8) handled by release.yml / publish.yml.
+on:
+  push:
+    tags:
+      # Any 4-part numeric dependency tag (e.g. 1.2.0.7, 1.2.1.0, 2.0.0.0).
+      - "[0-9]+.[0-9]+.[0-9]+.[0-9]+"
+  # Manual fallback: publish a specific existing tag from the Actions UI.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "kube-bench-dependency tag to build (e.g. 1.2.0.8)"
+        required: true
+
+jobs:
+  build-dependency-image:
+    name: Trigger compliance-kube-bench Jenkins job
+    runs-on: tools-runner
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: echo "value=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger compliance-kube-bench Jenkins job
+        uses: draios/jenkins-job-trigger-action@1.1.0
+        with:
+          jenkins_url: ${{ secrets.JENKINS_INTERNAL_URL }}
+          jenkins_user: ${{ secrets.JENKINS_QA_API_USER }}
+          jenkins_token: ${{ secrets.JENKINS_QA_API_TOKEN }}
+          job_name: "secure/job/compliance/job/compliance-kube-bench"
+          job_params: |
+            {
+              "TAG": "${{ steps.tag.outputs.value }}"
+            }
+          job_timeout: 3600
