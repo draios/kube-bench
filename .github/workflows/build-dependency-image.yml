@@ -3,80 +3,38 @@ name: Build kube-bench-dependency image
 # Publishes the `kube-bench-dependency` image consumed by secure-backend's
 # compliance-benchmark-runner (pinned there via KUBE_BENCH_TAG).
 #
-# Release model (registry tags are IMMUTABLE — they cannot be overwritten):
-#   * DEPENDENCY_VERSION holds the tag to publish, e.g. 1.2.0.8.
-#   * On push to master (i.e. when a PR that bumps DEPENDENCY_VERSION merges),
-#     this workflow creates the matching git tag on the merge commit (if it
-#     doesn't already exist) and triggers the compliance-kube-bench Jenkins
-#     job with TAG=<version>.
-#   * The Jenkins job checks out that git tag, builds Dependency-Dockerfile,
-#     and pushes kube-bench-dependency:<version> to GAR — so the published
-#     registry tag matches DEPENDENCY_VERSION 1:1.
+# Runs AFTER the tag is created: when a `1.2.0.*` tag is pushed, this workflow
+# triggers the `secure/compliance/compliance-kube-bench` Jenkins job with
+# TAG=<the tag>. The job checks out that tag, builds Dependency-Dockerfile,
+# and pushes kube-bench-dependency:<tag> to GAR — so the published registry
+# tag matches the git tag 1:1.
 #
-# To cut a new dependency image: bump DEPENDENCY_VERSION to the next unused
-# value and merge. If DEPENDENCY_VERSION is unchanged (tag already exists),
-# the job is skipped, so re-runs never attempt to overwrite an existing tag.
+# Registry tags are immutable, so each new `1.2.0.*` tag is a fresh release by
+# construction; this workflow never re-publishes an existing tag.
 #
-# This uses the `1.2.0.*` Sysdig dependency scheme, distinct from the upstream
-# `v*` release tags handled by release.yml / publish.yml.
+# The `1.2.0.*` scheme is the Sysdig dependency versioning, distinct from the
+# upstream `v*` release tags handled by release.yml / publish.yml.
 on:
   push:
-    branches:
-      - master
-    paths:
-      - DEPENDENCY_VERSION
-      - Dependency-Dockerfile
-      - .github/workflows/build-dependency-image.yml
-  # Manual fallback: publish DEPENDENCY_VERSION on demand from the Actions UI.
+    tags:
+      - "1.2.0.*"
+  # Manual fallback: publish a specific existing tag from the Actions UI.
   workflow_dispatch:
-
-permissions:
-  contents: write # create the release tag
+    inputs:
+      tag:
+        description: "kube-bench-dependency tag to build (e.g. 1.2.0.8)"
+        required: true
 
 jobs:
   build-dependency-image:
-    name: Release kube-bench-dependency image
+    name: Trigger compliance-kube-bench Jenkins job
     runs-on: tools-runner
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Read DEPENDENCY_VERSION
-        id: version
-        run: |
-          version="$(tr -d '[:space:]' < DEPENDENCY_VERSION)"
-          if [ -z "$version" ]; then
-            echo "DEPENDENCY_VERSION is empty" >&2
-            exit 1
-          fi
-          echo "value=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Skip if tag already published
-        id: guard
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          # Registry tags are immutable: if the git tag already exists the
-          # image was already built for this version, so do nothing.
-          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-            echo "Tag ${VERSION} already exists — nothing to release."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create release tag
-        if: steps.guard.outputs.release == 'true'
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          git tag "${VERSION}" "${GITHUB_SHA}"
-          git push origin "refs/tags/${VERSION}"
+      - name: Resolve tag
+        id: tag
+        run: echo "value=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Trigger compliance-kube-bench Jenkins job
-        if: steps.guard.outputs.release == 'true'
         uses: draios/jenkins-job-trigger-action@1.1.0
         with:
           jenkins_url: ${{ secrets.JENKINS_INTERNAL_URL }}
@@ -85,6 +43,6 @@ jobs:
           job_name: "secure/job/compliance/job/compliance-kube-bench"
           job_params: |
             {
-              "TAG": "${{ steps.version.outputs.value }}"
+              "TAG": "${{ steps.tag.outputs.value }}"
             }
           job_timeout: 3600
