@@ -3,21 +3,25 @@ name: Build kube-bench-dependency image
 # Publishes the `kube-bench-dependency` image consumed by secure-backend's
 # compliance-benchmark-runner (pinned there via KUBE_BENCH_TAG).
 #
-# Runs AFTER the tag is created: when a `1.2.0.*` tag is pushed, this workflow
-# triggers the `secure/compliance/compliance-kube-bench` Jenkins job with
-# TAG=<the tag>. The job checks out that tag, builds Dependency-Dockerfile,
+# Runs AFTER the tag is created: when a Sysdig dependency tag is pushed, this
+# workflow triggers the `secure/compliance/compliance-kube-bench` Jenkins job
+# with TAG=<the tag>. The job checks out that tag, builds Dependency-Dockerfile,
 # and pushes kube-bench-dependency:<tag> to GAR — so the published registry
 # tag matches the git tag 1:1.
 #
-# Registry tags are immutable, so each new `1.2.0.*` tag is a fresh release by
-# construction; this workflow never re-publishes an existing tag.
+# Registry tags are immutable, so each newly pushed dependency tag is a fresh
+# release by construction; this workflow never re-publishes an existing tag.
 #
-# The `1.2.0.*` scheme is the Sysdig dependency versioning, distinct from the
-# upstream `v*` release tags handled by release.yml / publish.yml.
+# Tag scheme: the Sysdig dependency versions are 4-part numeric
+# MAJOR.MINOR.PATCH.BUILD (e.g. 1.0.0.0 ... 1.2.0.7, and future 1.2.1.0 /
+# 2.0.0.0). The glob below matches any 4-part numeric tag, which is distinct
+# from the upstream release tags (`v*` prefix, and short 2-3 part tags like
+# 0.2.8) handled by release.yml / publish.yml.
 on:
   push:
     tags:
-      - "1.2.0.*"
+      # Any 4-part numeric dependency tag (e.g. 1.2.0.7, 1.2.1.0, 2.0.0.0).
+      - "[0-9]+.[0-9]+.[0-9]+.[0-9]+"
   # Manual fallback: publish a specific existing tag from the Actions UI.
   workflow_dispatch:
     inputs:
