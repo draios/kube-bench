@@ -1,0 +1,46 @@
+name: Build kube-bench-dependency image
+
+# Publishes the `kube-bench-dependency` image consumed by secure-backend's
+# compliance-benchmark-runner (pinned there via KUBE_BENCH_TAG).
+#
+# The image is built by the `secure/compliance/compliance-kube-bench` Jenkins
+# job, which checks out the git ref passed as its TAG parameter, builds
+# Dependency-Dockerfile, and pushes kube-bench-dependency:<TAG> to GAR.
+#
+# Tagging convention: the Sysdig dependency versions use the `1.2.0.*` scheme
+# (distinct from the upstream `v*` release tags handled by release.yml /
+# publish.yml). Pushing such a tag on a master commit triggers this workflow,
+# which fires the Jenkins job with TAG = the tag name, so the published
+# registry tag matches the git tag 1:1.
+on:
+  push:
+    tags:
+      - "1.*"
+  # Manual fallback: run against an existing tag from the Actions UI.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "kube-bench-dependency tag to build (e.g. 1.2.0.7)"
+        required: true
+
+jobs:
+  build-dependency-image:
+    name: Trigger compliance-kube-bench Jenkins job
+    runs-on: tools-runner
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: echo "value=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger compliance-kube-bench Jenkins job
+        uses: draios/jenkins-job-trigger-action@1.1.0
+        with:
+          jenkins_url: ${{ secrets.JENKINS_INTERNAL_URL }}
+          jenkins_user: ${{ secrets.JENKINS_QA_API_USER }}
+          jenkins_token: ${{ secrets.JENKINS_QA_API_TOKEN }}
+          job_name: "secure/job/compliance/job/compliance-kube-bench"
+          job_params: |
+            {
+              "TAG": "${{ steps.tag.outputs.value }}"
+            }
+          job_timeout: 3600
